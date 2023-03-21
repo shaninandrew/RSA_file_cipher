@@ -2,7 +2,7 @@
   "profiles": {
     "Run cipher": {
       "commandName": "Project",
-      "commandLineArgs": "-e \"1.pdf\" key.pem"
+      "commandLineArgs": "-d \"тест.docx.rsa\" key.pem"
     }
   }
 }
