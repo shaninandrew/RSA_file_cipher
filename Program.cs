@@ -100,7 +100,7 @@ if ((in_file.EndsWith(".rsa")) || ((command == "-d") || (command == "/d")))
     do
     {
 
-        byte[] read_buffer = new byte[DECRYPT_LEN_BUFFER * 10]; //условно 1k x 10
+        byte[] read_buffer = new byte[DECRYPT_LEN_BUFFER * 100]; //условно 1k x 100
                                                                 // сделаем большой буфер чтения
 
         int read_buffer_size = read_buffer.Length;
@@ -151,7 +151,10 @@ if ((in_file.EndsWith(".rsa")) || ((command == "-d") || (command == "/d")))
 
             ReadOnlySpan<byte> chunkie = read_buffer.AsSpan(x * DECRYPT_LEN_BUFFER, LEN); // самая тяжелая часть
 
+            //К сожалению нужно делать копию
             int chunkie_len = chunkie.Length;
+
+            //просто так в потоке дернуть копию нельзя...
             byte[] chunkie_copy = new byte[chunkie_len];
             chunkie.CopyTo(chunkie_copy);
 
