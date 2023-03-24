@@ -96,11 +96,11 @@ if ((in_file.EndsWith(".rsa")) || ((command == "-d") || (command == "/d")))
     int i = 0;
     int read = 0;
     string decor_progress_bar = ".-=<__>*";
-
+    int FLAG_READY = 0;
     do
     {
 
-        byte[] read_buffer = new byte[DECRYPT_LEN_BUFFER * 200]; //условно 1k x 200
+        byte[] read_buffer = new byte[DECRYPT_LEN_BUFFER * 10]; //условно 1k x 10
                                                                 // сделаем большой буфер чтения
 
         int read_buffer_size = read_buffer.Length;
@@ -126,6 +126,11 @@ if ((in_file.EndsWith(".rsa")) || ((command == "-d") || (command == "/d")))
         List< byte[] > out_buffer = new List<byte[]  >();
         out_buffer.Clear();
 
+        //Попробуем отмногопотчить
+        // скорость дешифрвания - 25 кб/с - мало
+        // сделаем многопоток
+
+        int RUN_THREADS = 0;
         do
         {
             //Размер кусочка по длине подходящего для шифрования
@@ -136,20 +141,58 @@ if ((in_file.EndsWith(".rsa")) || ((command == "-d") || (command == "/d")))
             } //последний блок
 
             //массив кусков которые можно шифровать
-            ReadOnlySpan<byte> chunkie = read_buffer.AsSpan(x * DECRYPT_LEN_BUFFER, LEN); // 3 ms
-            x++;
+            
+            
+            out_buffer.Add(null); // добавляем в лист - пустой массив
 
+
+            int Index = out_buffer.Count - 1;
             //подрезаем массив на длину в реальности (если буфер менее его размера)
-            byte[] decrypted_buffer = cipher.Decrypt(chunkie, RSAEncryptionPadding.OaepSHA1); // 3ms
+
+            ReadOnlySpan<byte> chunkie = read_buffer.AsSpan(x * DECRYPT_LEN_BUFFER, LEN); // самая тяжелая часть
+
+            int chunkie_len = chunkie.Length;
+            byte[] chunkie_copy = new byte[chunkie_len];
+            chunkie.CopyTo(chunkie_copy);
 
             // запишим в пром буфер
-            out_buffer.Add(decrypted_buffer); //39 ms
-            
+            ParameterizedThreadStart tz = new ParameterizedThreadStart(delegate {
+                
+                int i = Index+0; // копирование в новую ячейку
+                int copy_x = x + 0;
+                byte[] chunkie_copy2 = chunkie_copy.ToArray<byte>();
+
+                try
+                {
+                    byte[] decrypted_buffer = cipher.Decrypt(chunkie_copy2, RSAEncryptionPadding.OaepSHA1); // самая тяжелая часть
+                    out_buffer[i] = decrypted_buffer;
+                }
+                finally
+                {
+                    //флаги поднять - что готово
+                    FLAG_READY = FLAG_READY + 1;
+                    RUN_THREADS--;
+                }
+
+            });
+
+            Thread thread = new Thread(tz);
+            thread.Start();
             i++;
+            x++;
+            RUN_THREADS++;
 
         } while (x < blocks);
 
-        action_time.Stop();
+        //теперь вопрос КАК ПРОВЕРИТЬ ЧТО ДАННЫЕ ГОТОВЫ ? Мониторим
+
+        do
+        {
+            Thread.Sleep(100); // ждем пока все не выполнят
+            Console.Write(".");
+        } while (FLAG_READY < RUN_THREADS);
+
+            action_time.Stop();
 
         try
         {
@@ -165,11 +208,16 @@ if ((in_file.EndsWith(".rsa")) || ((command == "-d") || (command == "/d")))
 
         // баржа
         foreach (byte[] chunk in out_buffer)
-        { 
-                sw.WriteAsync(chunk,0,chunk.Length); // 40 ms
+        {
+           if ( chunk !=null)
+            try
+            {
+                sw.WriteAsync(chunk, 0, chunk.Length); // 40 ms
+            }
+            catch { }
          }
 
-
+        out_buffer.Clear(); //очистка
         //GC.Collect();
       
         if (read == 0) { break; }
