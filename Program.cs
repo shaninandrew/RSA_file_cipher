@@ -1,4 +1,4 @@
-<<<<<<< HEAD
+
 ﻿using System.Collections.Immutable;
 using System.Data;
 using System.Linq;
